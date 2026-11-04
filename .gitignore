@@ -1,0 +1,8 @@
+*.qcow2
+*.vmdk
+*.vdi
+*.iso
+*.ova
+.env
+cve_cache.db
+__pycache__/
