@@ -1,8 +1,46 @@
+import csv
 import ipaddress
+from pathlib import Path
 
-def is_whitelisted(ip, whitelist):
-    ip_obj = ipaddress.ip_address(ip)
-    for cidr in whitelist:
-        if ip_obj in ipaddress.ip_network(cidr):
+WHITELIST_PATH = Path(__file__).resolve().parent.parent / "data" / "whitelist.csv"
+
+
+class WhitelistError(Exception):
+    pass
+
+
+def load_whitelist(path=WHITELIST_PATH):
+    # fail if the whitelist file is missing or empty
+    networks = []
+    try:
+        with open(path) as file:
+            reader = csv.reader(file)
+            next(reader)  # skip the header row
+            for row in reader:
+                if row and not row[0].startswith("#"):
+                    networks.append(ipaddress.ip_network(row[0].strip()))
+    except (OSError, ValueError, StopIteration) as error:
+        raise WhitelistError(f"Cannot load whitelist: {error}")
+
+    if len(networks) == 0:
+        raise WhitelistError("Whitelist is empty")
+    return networks
+
+
+def is_whitelisted(target, whitelist):
+    try:
+        target_network = ipaddress.ip_network(target.strip(), strict=False)
+    except (ValueError, AttributeError):
+        return False  # Wrong input format
+    for allowed in whitelist:
+        if target_network.version == allowed.version and target_network.subnet_of(allowed):
             return True
     return False
+
+
+def validate_target(target, whitelist=None):
+    if whitelist is None:
+        whitelist = load_whitelist()
+    if not is_whitelisted(target, whitelist):
+        raise WhitelistError(f"Target {target} is not in the whitelist")
+    return ipaddress.ip_network(target.strip(), strict=False)
