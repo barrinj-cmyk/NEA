@@ -3,6 +3,7 @@ import ipaddress
 from pathlib import Path
 
 WHITELIST_PATH = Path(__file__).resolve().parent.parent / "data" / "whitelist.csv"
+MIN_PREFIX = 16
 
 
 class WhitelistError(Exception):
@@ -17,10 +18,14 @@ def load_whitelist(path=WHITELIST_PATH):
             reader = csv.reader(file)
             next(reader)  # skip the header row
             for row in reader:
-                if row and not row[0].startswith("#"):
-                    networks.append(ipaddress.ip_network(row[0].strip()))
+                # strip before the comment check
+                if row and row[0].strip() and not row[0].strip().startswith("#"):
+                    network = ipaddress.ip_network(row[0].strip(), strict=True)
+                    if network.version != 4 or not network.is_private or network.prefixlen < MIN_PREFIX:
+                        raise ValueError(f"{network} is not a private IPv4 range of /{MIN_PREFIX} or narrower")
+                    networks.append(network)
     except (OSError, ValueError, StopIteration) as error:
-        raise WhitelistError(f"Cannot load whitelist: {error}")
+        raise WhitelistError(f"Cannot load whitelist: {error}") from error
 
     if len(networks) == 0:
         raise WhitelistError("Whitelist is empty")
